@@ -103,7 +103,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, getDocs, getDoc, query, limit, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- GLOBAL STATE ---
@@ -343,7 +343,7 @@
                     responsive: true, maintainAspectRatio: false,
                     scales: {
                         y: { beginAtZero: true, max: 100, ticks: { callback: value => `${value}%` } },
-                        x: { type: 'time', time: { unit: 'day', tooltipFormat: 'MMM d, yyyy' } }
+                        x: { type: 'time', time: { unit: 'day', tooltipFormat: 'MMM d, yy' } }
                     },
                     plugins: { legend: { display: false } }
                 }
@@ -486,16 +486,16 @@
         }
         
         document.addEventListener('DOMContentLoaded', () => {
-//            const firebaseConfig = JSON.parse(__firebase_config);
             const firebaseConfig = {
                 apiKey: "AIzaSyCCzQvk_0_mcGFzuu2csDillQFyGHhc4MY",
                 authDomain: "dailydiscipline-cb786.firebaseapp.com",
                 projectId: "dailydiscipline-cb786",
-                storageBucket: "dailydiscipline-cb786.firebasestorage.app",
+                storageBucket: "dailydiscipline-cb786.appspot.com",
                 messagingSenderId: "230363214935",
                 appId: "1:230363214935:web:c804f127a6728d3a6c1f12",
                 measurementId: "G-ZM0K2WL7TH"
             };
+
             const app = initializeApp(firebaseConfig);
             db = getFirestore(app);
             auth = getAuth(app);
@@ -503,7 +503,6 @@
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
                     userId = user.uid;
-                    // appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
                     appId = firebaseConfig.appId;
                     scheduleDocRef = doc(db, "artifacts", appId, "users", userId, "schedule", "main");
                     historyCollectionRef = collection(db, "artifacts", appId, "users", userId, "history");
@@ -516,17 +515,18 @@
                         }
                         checkAndResetSchedule(data);
                         renderApp(data);
+                    }, (error) => {
+                        console.error("Firestore snapshot error:", error)
                     });
                 }
             });
             
             async function authInit() {
-                // if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                //     await signInWithCustomToken(auth, __initial_auth_token);
-                // } else {
-                //     await signInAnonymously(auth);
-                // }
-                await signInAnonymously(auth);
+                try {
+                    await signInAnonymously(auth);
+                } catch(error) {
+                    console.error("Anonymous sign-in failed", error);
+                }
             }
             authInit();
 
@@ -545,7 +545,7 @@
             document.getElementById('customizeBtn').addEventListener('click', openCustomizeForm);
             
             document.getElementById('motivateBtn').addEventListener('click', async () => {
-                openModal("Today's Focus Tip", "");
+                openModal("Today's Focus Tip", "...");
                 const prompt = `Give me a short (under 50 words), inspiring motivational message for a student in Dhaka. The student is preparing for a tough technical exam (ITEE), university studies, and job hunting. Today is ${new Date().toLocaleDateString('en-US', { weekday: 'long' })}.`;
                 const response = await callGemini(prompt);
                 modalBody.innerHTML = `<p class="text-lg">${response}</p>`;
@@ -614,7 +614,7 @@
 
             setInterval(() => {
                 if(currentScheduleData.routine && currentScheduleData.routine.length > 0) {
-                    renderTimeline(currentScheduleData.routine); // Re-render to update disabled states
+                    renderTimeline(currentScheduleData.routine); 
                     updateUI(currentScheduleData);
                     autoSaveHistory();
                 }
