@@ -486,7 +486,16 @@
         }
         
         document.addEventListener('DOMContentLoaded', () => {
-            const firebaseConfig = JSON.parse(__firebase_config);
+//            const firebaseConfig = JSON.parse(__firebase_config);
+            const firebaseConfig = {
+                apiKey: "AIzaSyCCzQvk_0_mcGFzuu2csDillQFyGHhc4MY",
+                authDomain: "dailydiscipline-cb786.firebaseapp.com",
+                projectId: "dailydiscipline-cb786",
+                storageBucket: "dailydiscipline-cb786.firebasestorage.app",
+                messagingSenderId: "230363214935",
+                appId: "1:230363214935:web:c804f127a6728d3a6c1f12",
+                measurementId: "G-ZM0K2WL7TH"
+            };
             const app = initializeApp(firebaseConfig);
             db = getFirestore(app);
             auth = getAuth(app);
@@ -494,7 +503,8 @@
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
                     userId = user.uid;
-                    appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                    // appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                    appId = firebaseConfig.appId;
                     scheduleDocRef = doc(db, "artifacts", appId, "users", userId, "schedule", "main");
                     historyCollectionRef = collection(db, "artifacts", appId, "users", userId, "history");
                     
@@ -511,11 +521,12 @@
             });
             
             async function authInit() {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
+                // if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                //     await signInWithCustomToken(auth, __initial_auth_token);
+                // } else {
+                //     await signInAnonymously(auth);
+                // }
+                await signInAnonymously(auth);
             }
             authInit();
 
