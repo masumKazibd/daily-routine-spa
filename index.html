@@ -9,8 +9,8 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Chosen Palette: Slate & Amber -->
-    <!-- Application Structure Plan: The app is a customizable dashboard with persisted data in Firestore. A new 'history' feature saves daily snapshots to a `history` subcollection. A "View History" button opens a modal containing a line chart to visualize completion percentage over time and an interactive calendar for a day-by-day breakdown. This transforms the app into a long-term progress tracking tool. -->
-    <!-- Visualization & Content Choices: The new history feature uses a line chart (Chart.js) to show progress trends, the best choice for time-series data. An interactive calendar is built with HTML/CSS/JS, providing a familiar UI for date selection. Clicking a date on the calendar fetches and displays the specific schedule for that day. This allows users to both see high-level trends and drill down into daily details. -->
+    <!-- Application Structure Plan: The app is a customizable dashboard with persisted data in Firestore. A 'history' feature saves daily snapshots. A "View History" button opens a modal with a chart and calendar. The Gemini AI features have been removed. The "Focus Tip" feature is now powered by a local array of quotes, making the app 100% free to operate. -->
+    <!-- Visualization & Content Choices: The core visualizations (timeline, donut chart, history chart) remain. The AI modal is now only used for displaying the random focus tip. The "Refine Goal" and other AI-driven buttons have been removed from the UI. The core interactive elements are now focused on task management and progress tracking via Firestore. -->
     <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
@@ -38,7 +38,7 @@
     <div id="app" class="container mx-auto p-4 md:p-8 max-w-5xl">
          <header class="text-center mb-8">
             <h1 class="text-3xl md:text-4xl font-bold text-slate-800">My Daily Dashboard</h1>
-            <p class="mt-2 text-lg text-slate-500">Your AI-powered guide to a productive day.</p>
+            <p class="mt-2 text-lg text-slate-500">Your personal guide to a productive day.</p>
             <div class="mt-4 space-x-2">
                  <button id="historyBtn" class="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors duration-200">
                     📊 View History
@@ -46,7 +46,7 @@
                 <button id="customizeBtn" class="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg shadow-md hover:bg-slate-700 transition-colors duration-200">
                     ⚙️ Customize Routine
                 </button>
-                <button id="motivateBtn" class="px-4 py-2 bg-amber-500 text-white font-semibold rounded-lg shadow-md hover:bg-amber-600 transition-colors duration-200">
+                <button id="focusTipBtn" class="px-4 py-2 bg-amber-500 text-white font-semibold rounded-lg shadow-md hover:bg-amber-600 transition-colors duration-200">
                     ✨ Get Today's Focus Tip
                 </button>
             </div>
@@ -78,32 +78,26 @@
                     <div id="task-counter" class="text-sm font-medium text-slate-500"></div>
                 </div>
                 <div id="timeline" class="relative"></div>
-                <div class="text-center mt-8">
-                    <button id="reflectBtn" class="px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors duration-200 opacity-50 cursor-not-allowed" disabled>
-                        ✨ Get Daily Reflection
-                    </button>
-                    <p id="reflectHint" class="text-xs text-slate-500 mt-2">Available after 8 PM. Progress saves automatically.</p>
-                </div>
             </div>
         </main>
     </div>
 
-    <div id="aiModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
+    <div id="tipModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
         <div id="modalOverlay" class="absolute inset-0 bg-black bg-opacity-50 modal-overlay"></div>
-        <div id="modalContent" class="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-auto z-10 modal-content">
+        <div id="modalContent" class="bg-white rounded-lg shadow-xl w-full max-w-md mx-auto z-10 modal-content">
             <div class="p-6">
                 <div class="flex justify-between items-start">
-                    <h3 id="modalTitle" class="text-xl font-semibold text-slate-800">AI Assistant</h3>
+                    <h3 id="modalTitle" class="text-xl font-semibold text-slate-800">Focus Tip</h3>
                     <button id="closeModalBtn" class="text-slate-400 hover:text-slate-600 text-3xl leading-none">&times;</button>
                 </div>
-                <div id="modalBody" class="mt-4 min-h-[150px] text-slate-600"></div>
+                <div id="modalBody" class="mt-4 text-lg text-slate-600"></div>
             </div>
         </div>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, getDocs, getDoc, query, limit, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- GLOBAL STATE ---
@@ -113,6 +107,19 @@
         let db, auth, userId, appId;
         let scheduleDocRef;
         let historyCollectionRef;
+
+        const focusTips = [
+            "The secret of getting ahead is getting started.",
+            "Discipline is the bridge between goals and accomplishment.",
+            "Don't watch the clock; do what it does. Keep going.",
+            "The only way to do great work is to love what you do.",
+            "Success is the sum of small efforts, repeated day in and day out.",
+            "Focus on being productive instead of busy.",
+            "One day or day one. You decide.",
+            "The expert in anything was once a beginner.",
+            "Your future is created by what you do today, not tomorrow.",
+            "Believe you can and you're halfway there."
+        ];
 
         const defaultScheduleData = {
             lastReset: new Date().toISOString().split('T')[0],
@@ -139,36 +146,27 @@
         };
         const categoryOptions = Object.keys(categoryColors);
         
-        async function callGemini(prompt) {
-             const apiKey = "";
-             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-             const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
-             try {
-                 const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                 if (!response.ok) throw new Error(`API call failed: ${response.status}`);
-                 const result = await response.json();
-                 return result.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, I couldn't get a response.";
-             } catch (error) {
-                 console.error("Gemini API call error:", error);
-                 return "An error occurred while contacting the AI assistant.";
-             }
-         }
-        
-        const aiModal = document.getElementById('aiModal');
+        const tipModal = document.getElementById('tipModal');
         const modalContent = document.getElementById('modalContent');
         const modalOverlay = document.getElementById('modalOverlay');
         const closeModalBtn = document.getElementById('closeModalBtn');
         const modalTitle = document.getElementById('modalTitle');
         const modalBody = document.getElementById('modalBody');
 
-        function openModal(title, content, size = 'max-w-2xl') {
-            modalContent.classList.remove('max-w-2xl', 'max-w-4xl');
+        function openModal(title, content, size = 'max-w-md') {
+            modalContent.classList.remove('max-w-md', 'max-w-2xl', 'max-w-4xl');
             modalContent.classList.add(size);
             modalTitle.textContent = title;
             modalBody.innerHTML = content;
-            aiModal.classList.remove('hidden');
+            tipModal.classList.remove('hidden');
         }
-        function closeModal() { aiModal.classList.add('hidden'); }
+        function closeModal() { tipModal.classList.add('hidden'); }
+
+        function showFocusTip() {
+            const randomIndex = Math.floor(Math.random() * focusTips.length);
+            const tip = focusTips[randomIndex];
+            openModal("Today's Focus Tip", `<p>${tip}</p>`);
+        }
 
         function renderApp(scheduleData) {
             if (!scheduleData || !scheduleData.routine || scheduleData.routine.length === 0) return;
@@ -191,24 +189,16 @@
 
             schedule.forEach((item, index) => {
                 const startTime = parseTime(item.time);
-                const nextItem = schedule[index + 1];
-                const endTime = nextItem ? parseTime(nextItem.time) : parseTime("23:59");
-                const isActive = now >= startTime && now < endTime && !activeFound;
-                if(isActive) activeFound = true;
-                
                 const isFuture = startTime > now;
-
-                const categoryColor = categoryColors[item.category] || '#64748b';
+                const isActive = now >= startTime && !activeFound && (index === schedule.length - 1 || now < parseTime(schedule[index + 1].time));
+                if (isActive) activeFound = true;
                 
-                let actionButton = `<button class="refine-goal-btn mt-3 text-sm font-semibold text-amber-600 hover:text-amber-700" data-index="${index}">Refine Goal ✨</button>`;
-                if (item.category === 'Job Search') {
-                    actionButton = `<button class="job-assistant-btn mt-3 text-sm font-semibold text-orange-600 hover:text-orange-700" data-index="${index}">Job Assistant ✨</button>`;
-                }
+                const categoryColor = categoryColors[item.category] || '#64748b';
                 const isCompleted = item.completed;
                 const completedClasses = isCompleted ? 'opacity-60' : '';
                 const textCompletedClasses = isCompleted ? 'line-through text-slate-500' : 'text-slate-800';
-
                 const displayTime = formatTimeForDisplay(startTime);
+
                 timelineContainer.innerHTML += `
                     <div class="timeline-item flex ${isActive ? 'active' : ''} ${completedClasses}">
                         <div class="flex flex-col items-center mr-4">
@@ -227,7 +217,6 @@
                                         <input type="checkbox" class="task-checkbox h-6 w-6 rounded border-gray-300 text-amber-600 focus:ring-amber-500 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50" data-index="${index}" ${isCompleted ? 'checked' : ''} ${isFuture ? 'disabled' : ''}>
                                     </div>
                                 </div>
-                                ${actionButton}
                             </div>
                         </div>
                     </div>`;
@@ -281,17 +270,6 @@
                 const progress = Math.max(0, Math.min(100, ((now - dayStart) / (dayEnd - dayStart)) * 100)); 
                 document.getElementById('progress-bar').style.width = `${progress}%`;
             }
-            const reflectBtn = document.getElementById('reflectBtn');
-            const reflectHint = document.getElementById('reflectHint');
-            if (now.getHours() >= 20) {
-                 reflectBtn.disabled = false;
-                 reflectBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                 reflectHint.textContent = 'Progress saves automatically at end of day.';
-            } else {
-                 reflectBtn.disabled = true;
-                 reflectBtn.classList.add('opacity-50', 'cursor-not-allowed');
-                 reflectHint.textContent = 'Reflection available after 8 PM.';
-            }
         }
         
         async function openHistoryModal() {
@@ -339,14 +317,7 @@
             if(historyChart) historyChart.destroy();
             historyChart = new Chart(ctx, {
                 type: 'line', data: chartData,
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    scales: {
-                        y: { beginAtZero: true, max: 100, ticks: { callback: value => `${value}%` } },
-                        x: { type: 'time', time: { unit: 'day', tooltipFormat: 'MMM d, yy' } }
-                    },
-                    plugins: { legend: { display: false } }
-                }
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: 100, ticks: { callback: value => `${value}%` } }, x: { type: 'time', time: { unit: 'day', tooltipFormat: 'MMM d, yy' } } }, plugins: { legend: { display: false } } }
             });
         }
 
@@ -398,17 +369,6 @@
             });
         }
         
-        async function getReflection() {
-             const scheduleString = currentScheduleData.routine.map(item => `${formatTimeForDisplay(parseTime(item.time))}: ${item.activity} (${item.completed ? 'Completed' : 'Not Done'})`).join('\n');
-             const prompt = `I am a student. Here is the schedule I followed today:\n${scheduleString}\n\nAct as a compassionate productivity coach. Based on this, provide a brief reflection. Tell me: 1. What was my biggest achievement? 2. A small adjustment for tomorrow? Keep it encouraging.`;
-             const response = await callGemini(prompt);
-             if (typeof response === 'string') {
-                openModal("Today's Reflection", `<div class="space-y-4">${response.replace(/\n/g, '<br>')}</div>`);
-             } else {
-                openModal("Today's Reflection", `<p>Sorry, there was an issue getting your reflection.</p>`);
-             }
-        }
-        
         async function autoSaveHistory() {
             const now = new Date();
             const todayStr = now.toISOString().split('T')[0];
@@ -438,24 +398,21 @@
             scheduleToEdit.forEach((item, index) => {
                 formHtml += `
                 <div class="grid grid-cols-1 md:grid-cols-6 gap-2 p-3 border rounded-lg bg-slate-50 relative">
-                    <div class="md:col-span-1"><label class="text-xs">Time</label><input type="time" value="${item.time}" data-field="time" data-index="${index}" class="mt-1 block w-full p-1 border rounded custom-time-input"></div>
-                    <div class="md:col-span-2"><label class="text-xs">Activity</label><input type="text" value="${item.activity}" data-field="activity" data-index="${index}" class="mt-1 block w-full p-1 border rounded"></div>
-                    <div class="md:col-span-2"><label class="text-xs">Goal</label><input type="text" value="${item.goal}" data-field="goal" data-index="${index}" class="mt-1 block w-full p-1 border rounded"></div>
-                    <div class="md:col-span-1"><label class="text-xs">Category</label><select data-field="category" data-index="${index}" class="mt-1 block w-full p-1 border rounded">${categoryOptions.map(c => `<option value="${c}" ${c === item.category ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
+                    <div class="md:col-span-1"><label class="text-xs">Time</label><input type="time" value="${item.time}" data-field="time" class="mt-1 block w-full p-1 border rounded custom-time-input"></div>
+                    <div class="md:col-span-2"><label class="text-xs">Activity</label><input type="text" value="${item.activity}" data-field="activity" class="mt-1 block w-full p-1 border rounded"></div>
+                    <div class="md:col-span-2"><label class="text-xs">Goal</label><input type="text" value="${item.goal}" data-field="goal" class="mt-1 block w-full p-1 border rounded"></div>
+                    <div class="md:col-span-1"><label class="text-xs">Category</label><select data-field="category" class="mt-1 block w-full p-1 border rounded">${categoryOptions.map(c => `<option value="${c}" ${c === item.category ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
                     <button class="delete-item-btn absolute -top-2 -right-2 bg-red-500 text-white rounded-full h-6 w-6 flex items-center justify-center text-xs" data-index="${index}">&times;</button>
-                </div>
-                `;
+                </div>`;
             });
             formHtml += `</div><div class="mt-4 flex justify-between"><button id="add-item-btn" class="px-4 py-2 text-sm bg-green-500 text-white font-semibold rounded-lg hover:bg-green-600">Add Item</button><button id="save-schedule-btn" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Save Changes</button></div>`;
-            
-            openModal("Customize Your Routine", formHtml);
+            openModal("Customize Your Routine", formHtml, 'max-w-4xl');
         }
 
         async function saveSchedule() {
             const form = document.getElementById('schedule-editor-form');
             const newSchedule = [];
             const itemCount = form.children.length;
-
             for (let i = 0; i < itemCount; i++) {
                 const itemDiv = form.children[i];
                 if(itemDiv){
@@ -475,6 +432,7 @@
         }
         
         function parseTime(timeStr) {
+            if (!timeStr) return new Date();
             const [hours, minutes] = timeStr.split(':').map(Number);
             const date = new Date();
             date.setHours(hours, minutes || 0, 0, 0);
@@ -486,7 +444,7 @@
         }
         
         document.addEventListener('DOMContentLoaded', () => {
-            const firebaseConfig = {
+             const firebaseConfig = {
                 apiKey: "AIzaSyCCzQvk_0_mcGFzuu2csDillQFyGHhc4MY",
                 authDomain: "dailydiscipline-cb786.firebaseapp.com",
                 projectId: "dailydiscipline-cb786",
@@ -503,7 +461,7 @@
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
                     userId = user.uid;
-                    appId = firebaseConfig.appId;
+                    appId = (typeof __app_id !== 'undefined') ? __app_id : firebaseConfig.appId;
                     scheduleDocRef = doc(db, "artifacts", appId, "users", userId, "schedule", "main");
                     historyCollectionRef = collection(db, "artifacts", appId, "users", userId, "history");
                     
@@ -511,21 +469,24 @@
                         let data = snap.exists() ? snap.data() : null;
                         if (!data || !data.routine) {
                             setDoc(scheduleDocRef, defaultScheduleData);
-                            data = defaultScheduleData;
+                            return;
                         }
                         checkAndResetSchedule(data);
                         renderApp(data);
-                    }, (error) => {
-                        console.error("Firestore snapshot error:", error)
-                    });
+                    }, (error) => console.error("Firestore snapshot error:", error));
                 }
             });
             
             async function authInit() {
                 try {
-                    await signInAnonymously(auth);
+                     if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
                 } catch(error) {
-                    console.error("Anonymous sign-in failed", error);
+                    console.error("Authentication failed:", error);
+                    alert("Could not connect to the database. Please check your Firebase settings and security rules.");
                 }
             }
             authInit();
@@ -539,17 +500,10 @@
             }
             
             document.getElementById('historyBtn').addEventListener('click', openHistoryModal);
-            document.getElementById('reflectBtn').addEventListener('click', getReflection);
+            document.getElementById('focusTipBtn').addEventListener('click', showFocusTip);
             closeModalBtn.addEventListener('click', closeModal);
             modalOverlay.addEventListener('click', closeModal);
             document.getElementById('customizeBtn').addEventListener('click', openCustomizeForm);
-            
-            document.getElementById('motivateBtn').addEventListener('click', async () => {
-                openModal("Today's Focus Tip", "...");
-                const prompt = `Give me a short (under 50 words), inspiring motivational message for a student in Dhaka. The student is preparing for a tough technical exam (ITEE), university studies, and job hunting. Today is ${new Date().toLocaleDateString('en-US', { weekday: 'long' })}.`;
-                const response = await callGemini(prompt);
-                modalBody.innerHTML = `<p class="text-lg">${response}</p>`;
-            });
             
             document.getElementById('timeline').addEventListener('click', async (e) => {
                 const target = e.target;
@@ -560,41 +514,10 @@
                         updatedRoutine[index] = { ...updatedRoutine[index], completed: target.checked };
                         await updateDoc(scheduleDocRef, { routine: updatedRoutine });
                     }
-                    return; 
-                }
-                const button = target.closest('button');
-                if (!button) return;
-                const index = parseInt(button.dataset.index, 10);
-                if (!currentScheduleData.routine || !currentScheduleData.routine[index]) return;
-                
-                const item = currentScheduleData.routine[index];
-                if (button.classList.contains('refine-goal-btn')) {
-                    const prompt = `Act as an expert productivity coach. My task is "${item.activity}" and my goal is "${item.goal}". Break this down into 3-4 small, concrete, actionable steps. Format as a simple list.`;
-                    const response = await callGemini(prompt);
-                    openModal(`Refining: ${item.activity}`, `<ul class="list-disc list-inside">${response.replace(/\* /g, '</li><li class="mb-2">').replace(/\n/g, '<br>')}</li></ul>`);
-                } 
-                else if (button.classList.contains('job-assistant-btn')) {
-                    openModal("AI Job Application Assistant", `
-                        <div class="space-y-4">
-                            <div><label for="companyName" class="block text-sm font-medium">Company Name</label><input type="text" id="companyName" class="mt-1 block w-full p-2 border rounded-md"></div>
-                            <div><label for="jobTitle" class="block text-sm font-medium">Job Title</label><input type="text" id="jobTitle" class="mt-1 block w-full p-2 border rounded-md"></div>
-                            <button id="generateLetterBtn" class="w-full px-4 py-2 bg-amber-500 text-white font-semibold rounded-lg">✨ Generate Introduction</button>
-                        </div>`);
-                    document.getElementById('generateLetterBtn').addEventListener('click', async () => {
-                        const company = document.getElementById('companyName').value, title = document.getElementById('jobTitle').value;
-                        if (!company || !title) return;
-                        const prompt = `Act as a career coach. I am a university student in Dhaka also studying for the ITEE certification exam. Draft a concise, professional, 2-3 sentence introductory message for a job application to "${company}" for the role of "${title}".`;
-                        const response = await callGemini(prompt);
-                        modalBody.innerHTML = `<p class="text-sm bg-slate-100 p-3 rounded-md">${response}</p><button id="copyBtn" class="mt-3 w-full px-4 py-2 bg-slate-600 text-white text-sm font-semibold rounded-lg">Copy</button>`;
-                        document.getElementById('copyBtn').addEventListener('click', () => {
-                            navigator.clipboard.writeText(response);
-                            document.getElementById('copyBtn').textContent = 'Copied!';
-                        });
-                    });
                 }
             });
             
-            document.getElementById('aiModal').addEventListener('click', (e) => {
+            document.getElementById('tipModal').addEventListener('click', (e) => {
                  if (e.target.id === 'save-schedule-btn') saveSchedule();
                  if (e.target.id === 'add-item-btn') {
                     const form = document.getElementById('schedule-editor-form');
