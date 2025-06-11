@@ -9,8 +9,8 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Chosen Palette: Slate & Amber -->
-    <!-- Application Structure Plan: The app is a customizable dashboard with persisted data in Firestore. A 'history' feature saves daily snapshots. A "View History" button opens a modal with a chart and calendar. The Gemini AI features have been removed. The "Focus Tip" feature is now powered by a local array of quotes, making the app 100% free to operate. -->
-    <!-- Visualization & Content Choices: The core visualizations (timeline, donut chart, history chart) remain. The AI modal is now only used for displaying the random focus tip. The "Refine Goal" and other AI-driven buttons have been removed from the UI. The core interactive elements are now focused on task management and progress tracking via Firestore. -->
+    <!-- Application Structure Plan: The app now includes a full authentication layer. By default, an auth screen with login/signup forms is shown. Once authenticated, this screen is hidden, and the main dashboard becomes visible. User data (schedule, history) is now stored under their unique user ID in Firestore, ensuring data persistence and privacy. A sign-out button is added for session management. -->
+    <!-- Visualization & Content Choices: The core visualizations are unchanged. The new authentication flow uses standard HTML forms. JavaScript handles form submission, calls Firebase Authentication functions (createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut), and manages the visibility of the auth screen vs. the main app dashboard based on the user's login state. This is a standard and secure way to implement user accounts. -->
     <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
@@ -34,55 +34,93 @@
     </style>
 </head>
 <body class="text-slate-700">
+    <!-- Auth Container -->
+    <div id="authContainer" class="min-h-screen bg-slate-100 flex flex-col justify-center items-center p-4">
+        <div class="max-w-md w-full bg-white p-8 rounded-xl shadow-lg">
+            <!-- Login Form -->
+            <div id="loginForm">
+                <h2 class="text-2xl font-bold text-center text-slate-800">Welcome Back</h2>
+                <p class="text-center text-slate-500 mb-6">Sign in to access your dashboard.</p>
+                <form id="login" class="space-y-4">
+                    <input type="email" id="loginEmail" placeholder="Email" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500" required>
+                    <input type="password" id="loginPassword" placeholder="Password" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500" required>
+                    <button type="submit" class="w-full bg-amber-500 text-white py-2 rounded-lg font-semibold hover:bg-amber-600 transition-colors">Login</button>
+                </form>
+                <p class="text-center text-sm text-slate-500 mt-6">
+                    Don't have an account? <a href="#" id="showSignup" class="font-semibold text-amber-600 hover:underline">Sign Up</a>
+                </p>
+            </div>
+            <!-- Signup Form -->
+            <div id="signupForm" class="hidden">
+                 <h2 class="text-2xl font-bold text-center text-slate-800">Create Account</h2>
+                <p class="text-center text-slate-500 mb-6">Start your journey to productivity.</p>
+                <form id="signup" class="space-y-4">
+                    <input type="email" id="signupEmail" placeholder="Email" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500" required>
+                    <input type="password" id="signupPassword" placeholder="Password (min. 6 characters)" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500" required>
+                    <button type="submit" class="w-full bg-amber-500 text-white py-2 rounded-lg font-semibold hover:bg-amber-600 transition-colors">Sign Up</button>
+                </form>
+                 <p class="text-center text-sm text-slate-500 mt-6">
+                    Already have an account? <a href="#" id="showLogin" class="font-semibold text-amber-600 hover:underline">Login</a>
+                </p>
+            </div>
+             <p id="authError" class="text-center text-sm text-red-500 mt-4"></p>
+        </div>
+    </div>
 
-    <div id="app" class="container mx-auto p-4 md:p-8 max-w-5xl">
-         <header class="text-center mb-8">
-            <h1 class="text-3xl md:text-4xl font-bold text-slate-800">My Daily Dashboard</h1>
-            <p class="mt-2 text-lg text-slate-500">Your personal guide to a productive day.</p>
-            <div class="mt-4 space-x-2">
-                 <button id="historyBtn" class="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors duration-200">
-                    📊 View History
-                </button>
-                <button id="customizeBtn" class="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg shadow-md hover:bg-slate-700 transition-colors duration-200">
-                    ⚙️ Customize Routine
-                </button>
-                <button id="focusTipBtn" class="px-4 py-2 bg-amber-500 text-white font-semibold rounded-lg shadow-md hover:bg-amber-600 transition-colors duration-200">
-                    ✨ Get Today's Focus Tip
-                </button>
-            </div>
-        </header>
-        
-        <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div class="lg:col-span-1 lg:order-2">
-                <div class="bg-white p-6 rounded-xl shadow-sm sticky top-8">
-                    <h2 class="text-xl font-semibold text-slate-800 mb-4 text-center">Time Allocation</h2>
-                    <div class="chart-container">
-                        <canvas id="scheduleChart"></canvas>
+    <!-- Main App Container -->
+    <div id="appContainer" class="hidden">
+        <div id="app" class="container mx-auto p-4 md:p-8 max-w-5xl">
+             <header class="text-center mb-8">
+                <h1 class="text-3xl md:text-4xl font-bold text-slate-800">My Daily Dashboard</h1>
+                <p class="mt-2 text-lg text-slate-500">Your personal guide to a productive day.</p>
+                <div class="mt-4 space-x-2">
+                     <button id="historyBtn" class="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors duration-200">
+                        📊 View History
+                    </button>
+                    <button id="customizeBtn" class="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg shadow-md hover:bg-slate-700 transition-colors duration-200">
+                        ⚙️ Customize Routine
+                    </button>
+                    <button id="focusTipBtn" class="px-4 py-2 bg-amber-500 text-white font-semibold rounded-lg shadow-md hover:bg-amber-600 transition-colors duration-200">
+                        ✨ Get Today's Focus Tip
+                    </button>
+                    <button id="signOutBtn" class="px-4 py-2 bg-red-500 text-white font-semibold rounded-lg shadow-md hover:bg-red-600 transition-colors duration-200">
+                        Sign Out
+                    </button>
+                </div>
+            </header>
+            
+            <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div class="lg:col-span-1 lg:order-2">
+                    <div class="bg-white p-6 rounded-xl shadow-sm sticky top-8">
+                        <h2 class="text-xl font-semibold text-slate-800 mb-4 text-center">Time Allocation</h2>
+                        <div class="chart-container">
+                            <canvas id="scheduleChart"></canvas>
+                        </div>
+                         <div id="chart-legend" class="mt-4 text-sm flex flex-wrap justify-center gap-x-4 gap-y-2"></div>
                     </div>
-                     <div id="chart-legend" class="mt-4 text-sm flex flex-wrap justify-center gap-x-4 gap-y-2"></div>
                 </div>
-            </div>
-            <div class="lg:col-span-2 lg:order-1">
-                <div class="mb-8">
-                     <h2 class="text-xl font-semibold text-slate-800 mb-2">Today's Progress</h2>
-                     <div class="bg-slate-200 rounded-full h-4 w-full overflow-hidden">
-                         <div id="progress-bar" class="bg-amber-500 h-4 rounded-full transition-all duration-500 ease-linear"></div>
-                     </div>
-                     <div class="flex justify-between text-sm mt-1">
-                         <span id="start-time-label">5:00 AM</span>
-                         <span id="current-time-label"></span>
-                     </div>
+                <div class="lg:col-span-2 lg:order-1">
+                    <div class="mb-8">
+                         <h2 class="text-xl font-semibold text-slate-800 mb-2">Today's Progress</h2>
+                         <div class="bg-slate-200 rounded-full h-4 w-full overflow-hidden">
+                             <div id="progress-bar" class="bg-amber-500 h-4 rounded-full transition-all duration-500 ease-linear"></div>
+                         </div>
+                         <div class="flex justify-between text-sm mt-1">
+                             <span id="start-time-label">5:00 AM</span>
+                             <span id="current-time-label"></span>
+                         </div>
+                    </div>
+                    <div class="mb-4 flex justify-between items-center">
+                        <h2 class="text-xl font-semibold text-slate-800">Today's Timeline</h2>
+                        <div id="task-counter" class="text-sm font-medium text-slate-500"></div>
+                    </div>
+                    <div id="timeline" class="relative"></div>
+                    <div class="text-center mt-8">
+                        <p class="text-xs text-slate-500 mt-2">Your progress is saved automatically.</p>
+                    </div>
                 </div>
-                <div class="mb-4 flex justify-between items-center">
-                    <h2 class="text-xl font-semibold text-slate-800">Today's Timeline</h2>
-                    <div id="task-counter" class="text-sm font-medium text-slate-500"></div>
-                </div>
-                <div id="timeline" class="relative"></div>
-                <div class="text-center mt-8">
-                    <p class="text-xs text-slate-500 mt-2">Your progress is saved automatically.</p>
-                </div>
-            </div>
-        </main>
+            </main>
+        </div>
     </div>
 
     <div id="mainModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
@@ -100,22 +138,29 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, getDocs, getDoc, query, limit, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        /**
-         * ---------------------------------------------------------------------
-         * 1. STATE MANAGEMENT & CONSTANTS
-         * ---------------------------------------------------------------------
-         */
+        // --- GLOBAL STATE ---
         let currentScheduleData = {};
         let scheduleChart = null;
         let historyChart = null;
         let db, auth, userId, appId;
         let scheduleDocRef;
         let historyCollectionRef;
+        let unsubscribeSchedule;
 
         const DOM = {
+            authContainer: document.getElementById('authContainer'),
+            appContainer: document.getElementById('appContainer'),
+            loginForm: document.getElementById('loginForm'),
+            signupForm: document.getElementById('signupForm'),
+            showSignup: document.getElementById('showSignup'),
+            showLogin: document.getElementById('showLogin'),
+            authError: document.getElementById('authError'),
+            login: document.getElementById('login'),
+            signup: document.getElementById('signup'),
+            signOutBtn: document.getElementById('signOutBtn'),
             timeline: document.getElementById('timeline'),
             taskCounter: document.getElementById('task-counter'),
             scheduleChartCanvas: document.getElementById('scheduleChart'),
@@ -141,20 +186,7 @@
         const defaultScheduleData = {
             lastReset: new Date().toISOString().split('T')[0],
             routine: [
-                { time: "05:00", activity: "Wake Up & Fajr Prayer", goal: "Start the day with mindfulness.", category: "Personal Care", completed: false },
-                { time: "05:30", activity: "Morning Refresh", goal: "Take a shower and get ready.", category: "Personal Care", completed: false },
-                { time: "06:00", activity: "Breakfast", goal: "Fuel your body and brain.", category: "Breaks & Meals", completed: false },
-                { time: "06:30", activity: "Study Block 1 (ITEE Exam)", goal: "Deep, focused ITEE FE Level 2 prep.", category: "Study", completed: false },
-                { time: "09:00", activity: "Study Block 2 (University)", goal: "Focus on university coursework.", category: "Study", completed: false },
-                { time: "12:00", activity: "Break & Skill Development", goal: "Rest, watch a tutorial, or read.", category: "Breaks & Meals", completed: false },
-                { time: "13:00", activity: "Lunch & Dhuhr Prayer", goal: "Take a proper lunch break.", category: "Breaks & Meals", completed: false },
-                { time: "14:00", activity: "Study Block 3 (ITEE Practice)", goal: "Focus on ITEE practice problems.", category: "Study", completed: false },
-                { time: "17:00", activity: "Job Application Block", goal: "Apply to 10-15 remote/local jobs.", category: "Job Search", completed: false },
-                { time: "18:30", activity: "Decompress & Maghrib Prayer", goal: "Unwind from the day and pray Maghrib.", category: "Personal Care", completed: false },
-                { time: "19:30", activity: "Study Block 4 (Review)", goal: "Review today's key topics.", category: "Study", completed: false },
-                { time: "21:30", activity: "Dinner & Isha Prayer", goal: "Have evening meal and pray Isha.", category: "Breaks & Meals", completed: false },
-                { time: "22:30", activity: "Wind Down", goal: "Tidy space, prepare for tomorrow.", category: "Personal Care", completed: false },
-                { time: "23:00", activity: "Sleep", goal: "Get 6 hours of restorative sleep.", category: "Sleep", completed: false }
+                { time: "05:00", activity: "Wake Up & Fajr Prayer", goal: "Start the day with mindfulness.", category: "Personal Care", completed: false }, { time: "05:30", activity: "Morning Refresh", goal: "Take a shower and get ready.", category: "Personal Care", completed: false }, { time: "06:00", activity: "Breakfast", goal: "Fuel your body and brain.", category: "Breaks & Meals", completed: false }, { time: "06:30", activity: "Study Block 1 (ITEE Exam)", goal: "Deep, focused ITEE FE Level 2 prep.", category: "Study", completed: false }, { time: "09:00", activity: "Study Block 2 (University)", goal: "Focus on university coursework.", category: "Study", completed: false }, { time: "12:00", activity: "Break & Skill Development", goal: "Rest, watch a tutorial, or read.", category: "Breaks & Meals", completed: false }, { time: "13:00", activity: "Lunch & Dhuhr Prayer", goal: "Take a proper lunch break.", category: "Breaks & Meals", completed: false }, { time: "14:00", activity: "Study Block 3 (ITEE Practice)", goal: "Focus on ITEE practice problems.", category: "Study", completed: false }, { time: "17:00", activity: "Job Application Block", goal: "Apply to 10-15 remote/local jobs.", category: "Job Search", completed: false }, { time: "18:30", activity: "Decompress & Maghrib Prayer", goal: "Unwind from the day and pray Maghrib.", category: "Personal Care", completed: false }, { time: "19:30", activity: "Study Block 4 (Review)", goal: "Review today's key topics.", category: "Study", completed: false }, { time: "21:30", activity: "Dinner & Isha Prayer", goal: "Have evening meal and pray Isha.", category: "Breaks & Meals", completed: false }, { time: "22:30", activity: "Wind Down", goal: "Tidy space, prepare for tomorrow.", category: "Personal Care", completed: false }, { time: "23:00", activity: "Sleep", goal: "Get 6 hours of restorative sleep.", category: "Sleep", completed: false }
             ]
         };
 
@@ -162,11 +194,6 @@
         const categoryOptions = Object.keys(categoryColors);
 
 
-        /**
-         * ---------------------------------------------------------------------
-         * 2. UTILITY FUNCTIONS
-         * ---------------------------------------------------------------------
-         */
         function parseTime(timeStr) {
             if (!timeStr) return new Date();
             const [hours, minutes] = timeStr.split(':').map(Number);
@@ -178,13 +205,7 @@
         function formatTimeForDisplay(date) {
             return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
         }
-
-
-        /**
-         * ---------------------------------------------------------------------
-         * 3. MODAL UI FUNCTIONS
-         * ---------------------------------------------------------------------
-         */
+        
         function openModal(title, content, size = 'max-w-md') {
             DOM.modalContent.classList.remove('max-w-md', 'max-w-2xl', 'max-w-4xl');
             DOM.modalContent.classList.add(size);
@@ -197,12 +218,6 @@
             DOM.modal.classList.add('hidden');
         }
 
-
-        /**
-         * ---------------------------------------------------------------------
-         * 4. CORE APPLICATION RENDERING
-         * ---------------------------------------------------------------------
-         */
         function renderApp(data) {
             if (!data || !data.routine) return;
             currentScheduleData = data;
@@ -302,12 +317,7 @@
                 DOM.progressBar.style.width = `${progress}%`;
             }
         }
-
-        /**
-         * ---------------------------------------------------------------------
-         * 5. HISTORY & CUSTOMIZATION LOGIC
-         * ---------------------------------------------------------------------
-         */
+        
         function showFocusTip() {
             const randomIndex = Math.floor(Math.random() * focusTips.length);
             openModal("Today's Focus Tip", `<p>${focusTips[randomIndex]}</p>`);
@@ -381,6 +391,23 @@
                 }
                 calendarEl.innerHTML += dayHtml;
             }
+
+            calendarEl.addEventListener('click', (e) => {
+                const dayEl = e.target.closest('.has-data');
+                if(!dayEl) return;
+                const date = dayEl.dataset.date;
+                const data = historyData.find(d => d.date === date);
+                if(data) {
+                    const detailEl = document.getElementById('historyDetail');
+                    let detailHtml = `<h5 class="font-bold mb-2">Details for ${date}</h5><ul class="text-sm space-y-1">`;
+                    data.schedule.forEach(item => {
+                        detailHtml += `<li class="flex items-center"><span class="mr-2">${item.completed ? '✅' : '❌'}</span><span>${item.activity}</span></li>`;
+                    });
+                    detailHtml += `</ul>`;
+                    detailEl.innerHTML = detailHtml;
+                    detailEl.classList.remove('hidden');
+                }
+            });
         }
         
         function openCustomizeForm() {
@@ -406,11 +433,6 @@
                 </div>`;
         }
 
-        /**
-         * ---------------------------------------------------------------------
-         * 6. DATA HANDLING & FIREBASE INTERACTIONS
-         * ---------------------------------------------------------------------
-         */
         async function saveScheduleFromForm() {
             const form = document.getElementById('schedule-editor-form');
             if (!form) return;
@@ -435,7 +457,6 @@
                 const task = updatedRoutine[index];
                 task.completed = !task.completed;
                 await updateDoc(scheduleDocRef, { routine: updatedRoutine });
-                // Instantly update today's history on every check/uncheck
                 updateTodayHistory(updatedRoutine);
             }
         }
@@ -453,21 +474,13 @@
             const lastResetDate = data.lastReset;
 
             if (lastResetDate && lastResetDate !== todayStr) {
-                // Save the previous day's final state before resetting
                 await updateTodayHistory(data.routine);
-                
                 console.log(`New day detected. Resetting schedule for ${todayStr}.`);
                 const newRoutine = data.routine.map(item => ({ ...item, completed: false }));
                 await setDoc(scheduleDocRef, { routine: newRoutine, lastReset: todayStr }, { merge: true });
             }
         }
 
-
-        /**
-         * ---------------------------------------------------------------------
-         * 7. INITIALIZATION & EVENT LISTENERS
-         * ---------------------------------------------------------------------
-         */
         function setupEventListeners() {
             DOM.historyBtn.addEventListener('click', openHistoryModal);
             DOM.focusTipBtn.addEventListener('click', showFocusTip);
@@ -489,9 +502,6 @@
                 }
                 if (e.target.classList.contains('delete-item-btn')) {
                     e.target.parentElement.remove();
-                }
-                if (e.target.closest('.has-data')) {
-                    const calendarEl = document.getElementById('historyCalendar');
                 }
             });
 
@@ -521,38 +531,74 @@
             
             onAuthStateChanged(auth, (user) => {
                 if (user) {
+                    DOM.authContainer.classList.add('hidden');
+                    DOM.appContainer.classList.remove('hidden');
+
                     userId = user.uid;
                     appId = (typeof __app_id !== 'undefined') ? __app_id : firebaseConfig.appId;
                     scheduleDocRef = doc(db, "artifacts", appId, "users", userId, "schedule", "main");
                     historyCollectionRef = collection(db, "artifacts", appId, "users", userId, "history");
                     
-                    onSnapshot(scheduleDocRef, (snap) => {
-                        let data = snap.exists() ? snap.data() : null;
-                        if (!data || !data.routine) {
+                    if (unsubscribeSchedule) unsubscribeSchedule();
+                    unsubscribeSchedule = onSnapshot(scheduleDocRef, (snap) => {
+                        if (!snap.exists() || !snap.data().routine) {
                             setDoc(scheduleDocRef, defaultScheduleData);
-                            return; 
+                        } else {
+                            checkAndResetScheduleForNewDay(snap.data());
+                            renderApp(snap.data());
                         }
-                        checkAndResetScheduleForNewDay(data);
-                        renderApp(data);
                     }, (error) => console.error("Firestore snapshot error:", error));
+                } else {
+                    DOM.authContainer.classList.remove('hidden');
+                    DOM.appContainer.classList.add('hidden');
+                    if(unsubscribeSchedule) unsubscribeSchedule();
                 }
             });
             
-            async function authInit() {
-                try {
-                     if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                        await signInWithCustomToken(auth, __initial_auth_token);
-                    } else {
-                        await signInAnonymously(auth);
-                    }
-                } catch(error) {
-                    console.error("Authentication failed:", error);
-                    alert("Could not connect to the database. Please check your Firebase settings and security rules.");
-                }
-            }
+            DOM.showSignup.addEventListener('click', (e) => {
+                e.preventDefault();
+                DOM.loginForm.classList.add('hidden');
+                DOM.signupForm.classList.remove('hidden');
+            });
+
+            DOM.showLogin.addEventListener('click', (e) => {
+                e.preventDefault();
+                DOM.loginForm.classList.remove('hidden');
+                DOM.signupForm.classList.add('hidden');
+            });
+
+            DOM.login.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const email = DOM.login.querySelector('#loginEmail').value;
+                const password = DOM.login.querySelector('#loginPassword').value;
+                signInWithEmailAndPassword(auth, email, password)
+                    .catch(error => {
+                        DOM.authError.textContent = error.message;
+                    });
+            });
+
+            DOM.signup.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const email = DOM.signup.querySelector('#signupEmail').value;
+                const password = DOM.signup.querySelector('#signupPassword').value;
+                createUserWithEmailAndPassword(auth, email, password)
+                    .then(userCredential => {
+                        // On successful signup, create their default schedule document
+                        const newUserId = userCredential.user.uid;
+                        const newAppId = (typeof __app_id !== 'undefined') ? __app_id : firebaseConfig.appId;
+                        const newUserScheduleDocRef = doc(db, "artifacts", newAppId, "users", newUserId, "schedule", "main");
+                        return setDoc(newUserScheduleDocRef, defaultScheduleData);
+                    })
+                    .catch(error => {
+                        DOM.authError.textContent = error.message;
+                    });
+            });
+
+            DOM.signOutBtn.addEventListener('click', () => {
+                signOut(auth);
+            });
 
             setupEventListeners();
-            authInit();
         }
 
         document.addEventListener('DOMContentLoaded', initApp);
