@@ -90,8 +90,12 @@
             </header>
             
             <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div class="lg:col-span-1 lg:order-2">
-                    <div class="bg-white p-6 rounded-xl shadow-sm sticky top-8">
+                <div class="lg:col-span-1 lg:order-2 space-y-8">
+                    <div id="clockContainer" class="bg-white p-6 rounded-xl shadow-sm text-center">
+                        <div id="clock-time" class="text-4xl md:text-5xl font-bold text-slate-700"></div>
+                        <div id="clock-date" class="text-lg text-slate-500"></div>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-sm">
                         <h2 class="text-xl font-semibold text-slate-800 mb-4 text-center">Time Allocation</h2>
                         <div class="chart-container">
                             <canvas id="scheduleChart"></canvas>
@@ -177,6 +181,8 @@
             historyBtn: document.getElementById('historyBtn'),
             customizeBtn: document.getElementById('customizeBtn'),
             focusTipBtn: document.getElementById('focusTipBtn'),
+            clockTime: document.getElementById('clock-time'),
+            clockDate: document.getElementById('clock-date'),
         };
 
         const focusTips = [
@@ -317,7 +323,7 @@
                 DOM.progressBar.style.width = `${progress}%`;
             }
         }
-        
+
         function showFocusTip() {
             const randomIndex = Math.floor(Math.random() * focusTips.length);
             openModal("Today's Focus Tip", `<p>${focusTips[randomIndex]}</p>`);
@@ -512,18 +518,22 @@
             }, 60000);
         }
         
+        function updateClock() {
+            const now = new Date();
+            DOM.clockTime.textContent = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+            DOM.clockDate.textContent = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        }
+
         function initApp() {
-            const firebaseConfig = (typeof __firebase_config !== 'undefined')
-                ? JSON.parse(__firebase_config)
-                : {
-                    apiKey: "AIzaSyCCzQvk_0_mcGFzuu2csDillQFyGHhc4MY",
-                    authDomain: "dailydiscipline-cb786.firebaseapp.com",
-                    projectId: "dailydiscipline-cb786",
-                    storageBucket: "dailydiscipline-cb786.appspot.com",
-                    messagingSenderId: "230363214935",
-                    appId: "1:230363214935:web:c804f127a6728d3a6c1f12",
-                    measurementId: "G-ZM0K2WL7TH"
-                };
+            const firebaseConfig = {
+                apiKey: "AIzaSyCCzQvk_0_mcGFzuu2csDillQFyGHhc4MY",
+                authDomain: "dailydiscipline-cb786.firebaseapp.com",
+                projectId: "dailydiscipline-cb786",
+                storageBucket: "dailydiscipline-cb786.appspot.com",
+                messagingSenderId: "230363214935",
+                appId: "1:230363214935:web:c804f127a6728d3a6c1f12",
+                measurementId: "G-ZM0K2WL7TH"
+            };
 
             const app = initializeApp(firebaseConfig);
             db = getFirestore(app);
@@ -535,7 +545,7 @@
                     DOM.appContainer.classList.remove('hidden');
 
                     userId = user.uid;
-                    appId = (typeof __app_id !== 'undefined') ? __app_id : firebaseConfig.appId;
+                    appId = firebaseConfig.appId;
                     scheduleDocRef = doc(db, "artifacts", appId, "users", userId, "schedule", "main");
                     historyCollectionRef = collection(db, "artifacts", appId, "users", userId, "history");
                     
@@ -583,9 +593,8 @@
                 const password = DOM.signup.querySelector('#signupPassword').value;
                 createUserWithEmailAndPassword(auth, email, password)
                     .then(userCredential => {
-                        // On successful signup, create their default schedule document
                         const newUserId = userCredential.user.uid;
-                        const newAppId = (typeof __app_id !== 'undefined') ? __app_id : firebaseConfig.appId;
+                        const newAppId = firebaseConfig.appId;
                         const newUserScheduleDocRef = doc(db, "artifacts", newAppId, "users", newUserId, "schedule", "main");
                         return setDoc(newUserScheduleDocRef, defaultScheduleData);
                     })
@@ -599,6 +608,8 @@
             });
 
             setupEventListeners();
+            updateClock();
+            setInterval(updateClock, 1000);
         }
 
         document.addEventListener('DOMContentLoaded', initApp);
