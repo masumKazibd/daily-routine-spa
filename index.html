@@ -435,7 +435,17 @@
                 const task = updatedRoutine[index];
                 task.completed = !task.completed;
                 await updateDoc(scheduleDocRef, { routine: updatedRoutine });
+                // Instantly update today's history on every check/uncheck
+                updateTodayHistory(updatedRoutine);
             }
+        }
+        
+        async function updateTodayHistory(routine) {
+            const todayStr = new Date().toISOString().split('T')[0];
+            const completedCount = routine.filter(item => item.completed).length;
+            const totalTasks = routine.length;
+            const snapshot = { date: todayStr, completedCount, totalTasks, schedule: routine };
+            await setDoc(doc(historyCollectionRef, todayStr), snapshot);
         }
 
         async function checkAndResetScheduleForNewDay(data) {
@@ -443,15 +453,8 @@
             const lastResetDate = data.lastReset;
 
             if (lastResetDate && lastResetDate !== todayStr) {
-                const historyDocRef = doc(historyCollectionRef, lastResetDate);
-                const docSnap = await getDoc(historyDocRef);
-                
-                if (!docSnap.exists() && data.routine.length > 0) {
-                    console.log(`Saving missed snapshot for ${lastResetDate}`);
-                    const completedCount = data.routine.filter(item => item.completed).length;
-                    const totalTasks = data.routine.length;
-                    await setDoc(historyDocRef, { date: lastResetDate, completedCount, totalTasks, schedule: data.routine });
-                }
+                // Save the previous day's final state before resetting
+                await updateTodayHistory(data.routine);
                 
                 console.log(`New day detected. Resetting schedule for ${todayStr}.`);
                 const newRoutine = data.routine.map(item => ({ ...item, completed: false }));
@@ -487,10 +490,8 @@
                 if (e.target.classList.contains('delete-item-btn')) {
                     e.target.parentElement.remove();
                 }
-                 if (e.target.closest('.has-data')) {
+                if (e.target.closest('.has-data')) {
                     const calendarEl = document.getElementById('historyCalendar');
-                    // This logic is better handled inside the renderHistoryCalendar function
-                    // to have access to the historyData scope. Re-delegating there.
                 }
             });
 
@@ -529,7 +530,7 @@
                         let data = snap.exists() ? snap.data() : null;
                         if (!data || !data.routine) {
                             setDoc(scheduleDocRef, defaultScheduleData);
-                            return; // Let the listener pick up the new default data
+                            return; 
                         }
                         checkAndResetScheduleForNewDay(data);
                         renderApp(data);
