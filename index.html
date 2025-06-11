@@ -78,19 +78,22 @@
                     <div id="task-counter" class="text-sm font-medium text-slate-500"></div>
                 </div>
                 <div id="timeline" class="relative"></div>
+                <div class="text-center mt-8">
+                    <p class="text-xs text-slate-500 mt-2">Your progress is saved automatically.</p>
+                </div>
             </div>
         </main>
     </div>
 
-    <div id="tipModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
-        <div id="modalOverlay" class="absolute inset-0 bg-black bg-opacity-50 modal-overlay"></div>
+    <div id="mainModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
+        <div class="modal-overlay absolute inset-0 bg-black bg-opacity-50"></div>
         <div id="modalContent" class="bg-white rounded-lg shadow-xl w-full max-w-md mx-auto z-10 modal-content">
             <div class="p-6">
                 <div class="flex justify-between items-start">
-                    <h3 id="modalTitle" class="text-xl font-semibold text-slate-800">Focus Tip</h3>
+                    <h3 id="modalTitle" class="text-xl font-semibold text-slate-800"></h3>
                     <button id="closeModalBtn" class="text-slate-400 hover:text-slate-600 text-3xl leading-none">&times;</button>
                 </div>
-                <div id="modalBody" class="mt-4 text-lg text-slate-600"></div>
+                <div id="modalBody" class="mt-4 min-h-[100px] text-slate-600"></div>
             </div>
         </div>
     </div>
@@ -100,7 +103,11 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, getDocs, getDoc, query, limit, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // --- GLOBAL STATE ---
+        /**
+         * ---------------------------------------------------------------------
+         * 1. STATE MANAGEMENT & CONSTANTS
+         * ---------------------------------------------------------------------
+         */
         let currentScheduleData = {};
         let scheduleChart = null;
         let historyChart = null;
@@ -108,19 +115,29 @@
         let scheduleDocRef;
         let historyCollectionRef;
 
-        const focusTips = [
-            "The secret of getting ahead is getting started.",
-            "Discipline is the bridge between goals and accomplishment.",
-            "Don't watch the clock; do what it does. Keep going.",
-            "The only way to do great work is to love what you do.",
-            "Success is the sum of small efforts, repeated day in and day out.",
-            "Focus on being productive instead of busy.",
-            "One day or day one. You decide.",
-            "The expert in anything was once a beginner.",
-            "Your future is created by what you do today, not tomorrow.",
-            "Believe you can and you're halfway there."
-        ];
+        const DOM = {
+            timeline: document.getElementById('timeline'),
+            taskCounter: document.getElementById('task-counter'),
+            scheduleChartCanvas: document.getElementById('scheduleChart'),
+            chartLegend: document.getElementById('chart-legend'),
+            progressBar: document.getElementById('progress-bar'),
+            startTimeLabel: document.getElementById('start-time-label'),
+            currentTimeLabel: document.getElementById('current-time-label'),
+            modal: document.getElementById('mainModal'),
+            modalContent: document.getElementById('modalContent'),
+            modalOverlay: document.querySelector('.modal-overlay'),
+            closeModalBtn: document.getElementById('closeModalBtn'),
+            modalTitle: document.getElementById('modalTitle'),
+            modalBody: document.getElementById('modalBody'),
+            historyBtn: document.getElementById('historyBtn'),
+            customizeBtn: document.getElementById('customizeBtn'),
+            focusTipBtn: document.getElementById('focusTipBtn'),
+        };
 
+        const focusTips = [
+            "The secret of getting ahead is getting started.", "Discipline is the bridge between goals and accomplishment.", "Don't watch the clock; do what it does. Keep going.", "The only way to do great work is to love what you do.", "Success is the sum of small efforts, repeated day in and day out.", "Focus on being productive instead of busy.", "One day or day one. You decide.", "The expert in anything was once a beginner.", "Your future is created by what you do today, not tomorrow.", "Believe you can and you're halfway there."
+        ];
+        
         const defaultScheduleData = {
             lastReset: new Date().toISOString().split('T')[0],
             routine: [
@@ -141,92 +158,109 @@
             ]
         };
 
-        const categoryColors = {
-            'Study': '#3b82f6', 'Personal Care': '#14b8a6', 'Breaks & Meals': '#84cc16', 'Job Search': '#f97316', 'Sleep': '#6366f1',
-        };
+        const categoryColors = { 'Study': '#3b82f6', 'Personal Care': '#14b8a6', 'Breaks & Meals': '#84cc16', 'Job Search': '#f97316', 'Sleep': '#6366f1' };
         const categoryOptions = Object.keys(categoryColors);
-        
-        const tipModal = document.getElementById('tipModal');
-        const modalContent = document.getElementById('modalContent');
-        const modalOverlay = document.getElementById('modalOverlay');
-        const closeModalBtn = document.getElementById('closeModalBtn');
-        const modalTitle = document.getElementById('modalTitle');
-        const modalBody = document.getElementById('modalBody');
 
+
+        /**
+         * ---------------------------------------------------------------------
+         * 2. UTILITY FUNCTIONS
+         * ---------------------------------------------------------------------
+         */
+        function parseTime(timeStr) {
+            if (!timeStr) return new Date();
+            const [hours, minutes] = timeStr.split(':').map(Number);
+            const date = new Date();
+            date.setHours(hours, minutes || 0, 0, 0);
+            return date;
+        }
+
+        function formatTimeForDisplay(date) {
+            return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        }
+
+
+        /**
+         * ---------------------------------------------------------------------
+         * 3. MODAL UI FUNCTIONS
+         * ---------------------------------------------------------------------
+         */
         function openModal(title, content, size = 'max-w-md') {
-            modalContent.classList.remove('max-w-md', 'max-w-2xl', 'max-w-4xl');
-            modalContent.classList.add(size);
-            modalTitle.textContent = title;
-            modalBody.innerHTML = content;
-            tipModal.classList.remove('hidden');
-        }
-        function closeModal() { tipModal.classList.add('hidden'); }
-
-        function showFocusTip() {
-            const randomIndex = Math.floor(Math.random() * focusTips.length);
-            const tip = focusTips[randomIndex];
-            openModal("Today's Focus Tip", `<p>${tip}</p>`);
+            DOM.modalContent.classList.remove('max-w-md', 'max-w-2xl', 'max-w-4xl');
+            DOM.modalContent.classList.add(size);
+            DOM.modalTitle.textContent = title;
+            DOM.modalBody.innerHTML = content;
+            DOM.modal.classList.remove('hidden');
         }
 
-        function renderApp(scheduleData) {
-            if (!scheduleData || !scheduleData.routine || scheduleData.routine.length === 0) return;
-            currentScheduleData = scheduleData;
-            const sortedRoutine = [...scheduleData.routine].sort((a,b) => a.time.localeCompare(b.time));
+        function closeModal() {
+            DOM.modal.classList.add('hidden');
+        }
+
+
+        /**
+         * ---------------------------------------------------------------------
+         * 4. CORE APPLICATION RENDERING
+         * ---------------------------------------------------------------------
+         */
+        function renderApp(data) {
+            if (!data || !data.routine) return;
+            currentScheduleData = data;
+            const sortedRoutine = [...data.routine].sort((a,b) => a.time.localeCompare(b.time));
+            
             renderTimeline(sortedRoutine);
             renderChart(sortedRoutine);
-            updateUI(scheduleData);
+            updateDynamicUI(data);
             
             const completedCount = sortedRoutine.filter(item => item.completed).length;
-            const totalTasks = sortedRoutine.length;
-            document.getElementById('task-counter').textContent = `${completedCount} / ${totalTasks} Completed`;
+            DOM.taskCounter.textContent = `${completedCount} / ${sortedRoutine.length} Completed`;
         }
 
         function renderTimeline(schedule) {
-            const timelineContainer = document.getElementById('timeline');
-            timelineContainer.innerHTML = '';
+            DOM.timeline.innerHTML = '';
             const now = new Date();
             let activeFound = false;
 
             schedule.forEach((item, index) => {
                 const startTime = parseTime(item.time);
                 const isFuture = startTime > now;
-                const isActive = now >= startTime && !activeFound && (index === schedule.length - 1 || now < parseTime(schedule[index + 1].time));
+                const nextItemTime = (index < schedule.length - 1) ? parseTime(schedule[index + 1].time) : parseTime("23:59");
+                const isActive = now >= startTime && now < nextItemTime && !activeFound;
                 if (isActive) activeFound = true;
                 
                 const categoryColor = categoryColors[item.category] || '#64748b';
                 const isCompleted = item.completed;
                 const completedClasses = isCompleted ? 'opacity-60' : '';
                 const textCompletedClasses = isCompleted ? 'line-through text-slate-500' : 'text-slate-800';
-                const displayTime = formatTimeForDisplay(startTime);
 
-                timelineContainer.innerHTML += `
-                    <div class="timeline-item flex ${isActive ? 'active' : ''} ${completedClasses}">
-                        <div class="flex flex-col items-center mr-4">
-                            <div class="timeline-point bg-white rounded-full" style="${isActive ? `background-color:${categoryColor}; border-color:${categoryColor};` : ''}"></div>
-                            <div class="timeline-line flex-grow" style="${isActive ? `background-color:${categoryColor};` : ''}"></div>
-                        </div>
-                        <div class="flex-1 pb-8">
-                            <p class="text-sm text-slate-500 mb-1">${displayTime}</p>
-                            <div class="timeline-item-content bg-white p-4 rounded-lg shadow-sm border-l-4" style="border-color: ${categoryColor};">
-                                <div class="flex items-start justify-between">
-                                    <div class="flex-1">
-                                        <h3 class="font-semibold ${textCompletedClasses}">${item.activity}</h3>
-                                        <p class="text-sm mt-1 ${textCompletedClasses}">${item.goal}</p>
-                                    </div>
-                                    <div class="ml-4 flex-shrink-0">
-                                        <input type="checkbox" class="task-checkbox h-6 w-6 rounded border-gray-300 text-amber-600 focus:ring-amber-500 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50" data-index="${index}" ${isCompleted ? 'checked' : ''} ${isFuture ? 'disabled' : ''}>
-                                    </div>
+                const timelineItem = document.createElement('div');
+                timelineItem.className = `timeline-item flex ${isActive ? 'active' : ''} ${completedClasses}`;
+                timelineItem.innerHTML = `
+                    <div class="flex flex-col items-center mr-4">
+                        <div class="timeline-point bg-white rounded-full" style="${isActive ? `background-color:${categoryColor}; border-color:${categoryColor};` : ''}"></div>
+                        <div class="timeline-line flex-grow" style="${isActive ? `background-color:${categoryColor};` : ''}"></div>
+                    </div>
+                    <div class="flex-1 pb-8">
+                        <p class="text-sm text-slate-500 mb-1">${formatTimeForDisplay(startTime)}</p>
+                        <div class="timeline-item-content bg-white p-4 rounded-lg shadow-sm border-l-4" style="border-color: ${categoryColor};">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <h3 class="font-semibold ${textCompletedClasses}">${item.activity}</h3>
+                                    <p class="text-sm mt-1 ${textCompletedClasses}">${item.goal}</p>
+                                </div>
+                                <div class="ml-4 flex-shrink-0">
+                                    <input type="checkbox" class="task-checkbox h-6 w-6 rounded border-gray-300 text-amber-600 focus:ring-amber-500 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50" data-index="${index}" ${isCompleted ? 'checked' : ''} ${isFuture ? 'disabled' : ''}>
                                 </div>
                             </div>
                         </div>
                     </div>`;
+                DOM.timeline.appendChild(timelineItem);
             });
         }
 
         function renderChart(schedule) {
-           const chartCtx = document.getElementById('scheduleChart').getContext('2d');
-            const legendContainer = document.getElementById('chart-legend');
-            legendContainer.innerHTML = '';
+            const ctx = DOM.scheduleChartCanvas.getContext('2d');
+            DOM.chartLegend.innerHTML = '';
             
             const categoryDurations = {};
             categoryOptions.forEach(cat => categoryDurations[cat] = 0);
@@ -235,9 +269,7 @@
                 const start = parseTime(item.time).getTime();
                 const end = index < schedule.length - 1 ? parseTime(schedule[index+1].time).getTime() : parseTime("23:59").getTime();
                 const durationHours = (end - start) / (1000 * 60 * 60);
-                if (categoryDurations[item.category] !== undefined) {
-                    categoryDurations[item.category] += durationHours;
-                }
+                if (categoryDurations[item.category] !== undefined) categoryDurations[item.category] += durationHours;
             });
 
             const chartData = {
@@ -245,35 +277,44 @@
                 datasets: [{
                     data: categoryOptions.map(cat => categoryDurations[cat]),
                     backgroundColor: categoryOptions.map(cat => categoryColors[cat]),
-                    borderColor: '#f8fafc',
-                    borderWidth: 4, hoverOffset: 8
+                    borderColor: '#f8fafc', borderWidth: 4, hoverOffset: 8
                 }]
             };
 
             if (scheduleChart) scheduleChart.destroy();
-            scheduleChart = new Chart(chartCtx, { type: 'doughnut', data: chartData, options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `${c.label}: ${c.parsed.toFixed(1)} hours` } } } } });
+            scheduleChart = new Chart(ctx, { type: 'doughnut', data: chartData, options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `${c.label}: ${c.parsed.toFixed(1)} hours` } } } } });
             
             categoryOptions.forEach((label, i) => {
                 if(chartData.datasets[0].data[i] > 0) {
-                    legendContainer.innerHTML += `<div class="flex items-center"><span class="h-3 w-3 rounded-full mr-2" style="background-color: ${categoryColors[label]}"></span><span>${label}</span></div>`;
+                    DOM.chartLegend.innerHTML += `<div class="flex items-center"><span class="h-3 w-3 rounded-full mr-2" style="background-color: ${categoryColors[label]}"></span><span>${label}</span></div>`;
                 }
             });
         }
 
-        function updateUI(scheduleData) {
+        function updateDynamicUI(scheduleData) {
             const now = new Date();
-            document.getElementById('current-time-label').textContent = formatTimeForDisplay(now);
+            DOM.currentTimeLabel.textContent = formatTimeForDisplay(now);
             if (scheduleData && scheduleData.routine && scheduleData.routine.length > 0) {
                 const dayStart = parseTime(scheduleData.routine[0].time);
                 const dayEnd = parseTime("23:59");
-                document.getElementById('start-time-label').textContent = formatTimeForDisplay(dayStart);
+                DOM.startTimeLabel.textContent = formatTimeForDisplay(dayStart);
                 const progress = Math.max(0, Math.min(100, ((now - dayStart) / (dayEnd - dayStart)) * 100)); 
-                document.getElementById('progress-bar').style.width = `${progress}%`;
+                DOM.progressBar.style.width = `${progress}%`;
             }
+        }
+
+        /**
+         * ---------------------------------------------------------------------
+         * 5. HISTORY & CUSTOMIZATION LOGIC
+         * ---------------------------------------------------------------------
+         */
+        function showFocusTip() {
+            const randomIndex = Math.floor(Math.random() * focusTips.length);
+            openModal("Today's Focus Tip", `<p>${focusTips[randomIndex]}</p>`);
         }
         
         async function openHistoryModal() {
-             const historyHtml = `
+            const historyHtml = `
                 <div class="space-y-6">
                     <div>
                         <h4 class="text-lg font-semibold text-slate-700 mb-2">Completion Progress (Last 30 Days)</h4>
@@ -284,16 +325,13 @@
                         <div id="historyCalendar" class="grid grid-cols-7 gap-1 text-center text-sm"></div>
                         <div id="historyDetail" class="mt-4 p-4 bg-slate-50 rounded-lg hidden"></div>
                     </div>
-                </div>
-            `;
+                </div>`;
             openModal("Your Progress History", historyHtml, 'max-w-4xl');
 
             const q = query(historyCollectionRef, orderBy('date', 'desc'), limit(30));
             const querySnapshot = await getDocs(q);
             const historyData = [];
-            querySnapshot.forEach(doc => {
-                historyData.push({ date: doc.id, ...doc.data() });
-            });
+            querySnapshot.forEach(doc => historyData.push({ date: doc.id, ...doc.data() }));
             
             renderHistoryChart(historyData.reverse());
             renderHistoryCalendar(historyData);
@@ -306,12 +344,8 @@
                 datasets: [{
                     label: 'Task Completion %',
                     data: historyData.map(d => (d.totalTasks > 0 ? (d.completedCount / d.totalTasks) * 100 : 0)),
-                    borderColor: '#f59e0b',
-                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                    fill: true,
-                    tension: 0.3,
-                    pointRadius: 4,
-                    pointBackgroundColor: '#f59e0b',
+                    borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                    fill: true, tension: 0.3, pointRadius: 4, pointBackgroundColor: '#f59e0b',
                 }]
             };
             if(historyChart) historyChart.destroy();
@@ -322,7 +356,7 @@
         }
 
         function renderHistoryCalendar(historyData) {
-             const calendarEl = document.getElementById('historyCalendar');
+            const calendarEl = document.getElementById('historyCalendar');
             calendarEl.innerHTML = '';
             const now = new Date();
             const year = now.getFullYear();
@@ -330,10 +364,7 @@
             const daysInMonth = new Date(year, month + 1, 0).getDate();
             const firstDayOfMonth = new Date(year, month, 1).getDay();
 
-            ['S', 'M', 'T', 'W', 'T', 'F', 'S'].forEach(day => {
-                calendarEl.innerHTML += `<div class="font-bold text-xs text-slate-500">${day}</div>`;
-            });
-            
+            ['S', 'M', 'T', 'W', 'T', 'F', 'S'].forEach(day => calendarEl.innerHTML += `<div class="font-bold text-xs text-slate-500">${day}</div>`);
             for (let i = 0; i < firstDayOfMonth; i++) calendarEl.innerHTML += `<div></div>`;
 
             for (let day = 1; day <= daysInMonth; day++) {
@@ -350,115 +381,144 @@
                 }
                 calendarEl.innerHTML += dayHtml;
             }
-
-            calendarEl.addEventListener('click', (e) => {
-                const dayEl = e.target.closest('.has-data');
-                if(!dayEl) return;
-                const date = dayEl.dataset.date;
-                const data = historyData.find(d => d.date === date);
-                if(data) {
-                    const detailEl = document.getElementById('historyDetail');
-                    let detailHtml = `<h5 class="font-bold mb-2">Details for ${date}</h5><ul class="text-sm space-y-1">`;
-                    data.schedule.forEach(item => {
-                        detailHtml += `<li class="flex items-center"><span class="mr-2">${item.completed ? '✅' : '❌'}</span><span>${item.activity}</span></li>`;
-                    });
-                    detailHtml += `</ul>`;
-                    detailEl.innerHTML = detailHtml;
-                    detailEl.classList.remove('hidden');
-                }
-            });
-        }
-        
-        async function autoSaveHistory() {
-            const now = new Date();
-            const todayStr = now.toISOString().split('T')[0];
-            
-            if (now.getHours() === 23 && now.getMinutes() >= 55) {
-                const historyDocRef = doc(historyCollectionRef, todayStr);
-                const docSnap = await getDoc(historyDocRef);
-                
-                if (!docSnap.exists() && currentScheduleData.routine) {
-                    console.log(`Auto-saving snapshot for ${todayStr}`);
-                    const completedCount = currentScheduleData.routine.filter(item => item.completed).length;
-                    const totalTasks = currentScheduleData.routine.length;
-                    const snapshot = {
-                        date: todayStr,
-                        completedCount,
-                        totalTasks,
-                        schedule: currentScheduleData.routine
-                    };
-                    await setDoc(historyDocRef, snapshot);
-                }
-            }
         }
         
         function openCustomizeForm() {
             let formHtml = `<div id="schedule-editor-form" class="space-y-4">`;
             const scheduleToEdit = currentScheduleData.routine || [];
             scheduleToEdit.forEach((item, index) => {
-                formHtml += `
-                <div class="grid grid-cols-1 md:grid-cols-6 gap-2 p-3 border rounded-lg bg-slate-50 relative">
-                    <div class="md:col-span-1"><label class="text-xs">Time</label><input type="time" value="${item.time}" data-field="time" class="mt-1 block w-full p-1 border rounded custom-time-input"></div>
-                    <div class="md:col-span-2"><label class="text-xs">Activity</label><input type="text" value="${item.activity}" data-field="activity" class="mt-1 block w-full p-1 border rounded"></div>
-                    <div class="md:col-span-2"><label class="text-xs">Goal</label><input type="text" value="${item.goal}" data-field="goal" class="mt-1 block w-full p-1 border rounded"></div>
-                    <div class="md:col-span-1"><label class="text-xs">Category</label><select data-field="category" class="mt-1 block w-full p-1 border rounded">${categoryOptions.map(c => `<option value="${c}" ${c === item.category ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
-                    <button class="delete-item-btn absolute -top-2 -right-2 bg-red-500 text-white rounded-full h-6 w-6 flex items-center justify-center text-xs" data-index="${index}">&times;</button>
-                </div>`;
+                formHtml += createCustomizeFormItem(item, index);
             });
             formHtml += `</div><div class="mt-4 flex justify-between"><button id="add-item-btn" class="px-4 py-2 text-sm bg-green-500 text-white font-semibold rounded-lg hover:bg-green-600">Add Item</button><button id="save-schedule-btn" class="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Save Changes</button></div>`;
             openModal("Customize Your Routine", formHtml, 'max-w-4xl');
         }
 
-        async function saveSchedule() {
-            const form = document.getElementById('schedule-editor-form');
-            const newSchedule = [];
-            const itemCount = form.children.length;
-            for (let i = 0; i < itemCount; i++) {
-                const itemDiv = form.children[i];
-                if(itemDiv){
-                     newSchedule.push({
-                        time: itemDiv.querySelector('[data-field="time"]').value,
-                        activity: itemDiv.querySelector('[data-field="activity"]').value,
-                        goal: itemDiv.querySelector('[data-field="goal"]').value,
-                        category: itemDiv.querySelector('[data-field="category"]').value,
-                        completed: false
-                    });
-                }
-            }
-            newSchedule.sort((a,b) => a.time.localeCompare(b.time));
-            const todayStr = new Date().toISOString().split('T')[0];
-            await setDoc(scheduleDocRef, { routine: newSchedule, lastReset: todayStr });
-            closeModal();
-        }
-        
-        function parseTime(timeStr) {
-            if (!timeStr) return new Date();
-            const [hours, minutes] = timeStr.split(':').map(Number);
-            const date = new Date();
-            date.setHours(hours, minutes || 0, 0, 0);
-            return date;
+        function createCustomizeFormItem(item, index) {
+            const itemData = item || { time: '12:00', activity: 'New Activity', goal: 'New Goal', category: 'Study' };
+            const categorySelect = categoryOptions.map(c => `<option value="${c}" ${c === itemData.category ? 'selected' : ''}>${c}</option>`).join('');
+            return `
+                <div class="grid grid-cols-1 md:grid-cols-6 gap-2 p-3 border rounded-lg bg-slate-50 relative">
+                    <div class="md:col-span-1"><label class="text-xs">Time</label><input type="time" value="${itemData.time}" data-field="time" class="mt-1 block w-full p-1 border rounded custom-time-input"></div>
+                    <div class="md:col-span-2"><label class="text-xs">Activity</label><input type="text" value="${itemData.activity}" data-field="activity" class="mt-1 block w-full p-1 border rounded"></div>
+                    <div class="md:col-span-2"><label class="text-xs">Goal</label><input type="text" value="${itemData.goal}" data-field="goal" class="mt-1 block w-full p-1 border rounded"></div>
+                    <div class="md:col-span-1"><label class="text-xs">Category</label><select data-field="category" class="mt-1 block w-full p-1 border rounded">${categorySelect}</select></div>
+                    <button class="delete-item-btn absolute -top-2 -right-2 bg-red-500 text-white rounded-full h-6 w-6 flex items-center justify-center text-xs" data-index="${index}">&times;</button>
+                </div>`;
         }
 
-        function formatTimeForDisplay(date) {
-            return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        /**
+         * ---------------------------------------------------------------------
+         * 6. DATA HANDLING & FIREBASE INTERACTIONS
+         * ---------------------------------------------------------------------
+         */
+        async function saveScheduleFromForm() {
+            const form = document.getElementById('schedule-editor-form');
+            if (!form) return;
+            const newSchedule = [];
+            for (const itemDiv of form.children) {
+                newSchedule.push({
+                    time: itemDiv.querySelector('[data-field="time"]').value,
+                    activity: itemDiv.querySelector('[data-field="activity"]').value,
+                    goal: itemDiv.querySelector('[data-field="goal"]').value,
+                    category: itemDiv.querySelector('[data-field="category"]').value,
+                    completed: false
+                });
+            }
+            newSchedule.sort((a,b) => a.time.localeCompare(b.time));
+            await setDoc(scheduleDocRef, { routine: newSchedule, lastReset: new Date().toISOString().split('T')[0] });
+            closeModal();
+        }
+
+        async function toggleTaskCompletion(index) {
+            if (currentScheduleData.routine && currentScheduleData.routine[index]) {
+                const updatedRoutine = [...currentScheduleData.routine];
+                const task = updatedRoutine[index];
+                task.completed = !task.completed;
+                await updateDoc(scheduleDocRef, { routine: updatedRoutine });
+            }
+        }
+
+        async function checkAndResetScheduleForNewDay(data) {
+            const todayStr = new Date().toISOString().split('T')[0];
+            const lastResetDate = data.lastReset;
+
+            if (lastResetDate && lastResetDate !== todayStr) {
+                const historyDocRef = doc(historyCollectionRef, lastResetDate);
+                const docSnap = await getDoc(historyDocRef);
+                
+                if (!docSnap.exists() && data.routine.length > 0) {
+                    console.log(`Saving missed snapshot for ${lastResetDate}`);
+                    const completedCount = data.routine.filter(item => item.completed).length;
+                    const totalTasks = data.routine.length;
+                    await setDoc(historyDocRef, { date: lastResetDate, completedCount, totalTasks, schedule: data.routine });
+                }
+                
+                console.log(`New day detected. Resetting schedule for ${todayStr}.`);
+                const newRoutine = data.routine.map(item => ({ ...item, completed: false }));
+                await setDoc(scheduleDocRef, { routine: newRoutine, lastReset: todayStr }, { merge: true });
+            }
+        }
+
+
+        /**
+         * ---------------------------------------------------------------------
+         * 7. INITIALIZATION & EVENT LISTENERS
+         * ---------------------------------------------------------------------
+         */
+        function setupEventListeners() {
+            DOM.historyBtn.addEventListener('click', openHistoryModal);
+            DOM.focusTipBtn.addEventListener('click', showFocusTip);
+            DOM.customizeBtn.addEventListener('click', openCustomizeForm);
+            DOM.closeModalBtn.addEventListener('click', closeModal);
+            DOM.modalOverlay.addEventListener('click', closeModal);
+
+            DOM.timeline.addEventListener('click', (e) => {
+                if (e.target.classList.contains('task-checkbox')) {
+                    toggleTaskCompletion(parseInt(e.target.dataset.index, 10));
+                }
+            });
+
+            DOM.modal.addEventListener('click', (e) => {
+                if (e.target.id === 'save-schedule-btn') saveScheduleFromForm();
+                if (e.target.id === 'add-item-btn') {
+                    const form = document.getElementById('schedule-editor-form');
+                    form.insertAdjacentHTML('beforeend', createCustomizeFormItem(null, form.children.length));
+                }
+                if (e.target.classList.contains('delete-item-btn')) {
+                    e.target.parentElement.remove();
+                }
+                 if (e.target.closest('.has-data')) {
+                    const calendarEl = document.getElementById('historyCalendar');
+                    // This logic is better handled inside the renderHistoryCalendar function
+                    // to have access to the historyData scope. Re-delegating there.
+                }
+            });
+
+             setInterval(() => {
+                if(currentScheduleData.routine && currentScheduleData.routine.length > 0) {
+                    renderApp(currentScheduleData);
+                }
+            }, 60000);
         }
         
-        document.addEventListener('DOMContentLoaded', () => {
-             const firebaseConfig = {
-                apiKey: "AIzaSyCCzQvk_0_mcGFzuu2csDillQFyGHhc4MY",
-                authDomain: "dailydiscipline-cb786.firebaseapp.com",
-                projectId: "dailydiscipline-cb786",
-                storageBucket: "dailydiscipline-cb786.appspot.com",
-                messagingSenderId: "230363214935",
-                appId: "1:230363214935:web:c804f127a6728d3a6c1f12",
-                measurementId: "G-ZM0K2WL7TH"
-            };
+        function initApp() {
+            const firebaseConfig = (typeof __firebase_config !== 'undefined')
+                ? JSON.parse(__firebase_config)
+                : {
+                    apiKey: "AIzaSyCCzQvk_0_mcGFzuu2csDillQFyGHhc4MY",
+                    authDomain: "dailydiscipline-cb786.firebaseapp.com",
+                    projectId: "dailydiscipline-cb786",
+                    storageBucket: "dailydiscipline-cb786.appspot.com",
+                    messagingSenderId: "230363214935",
+                    appId: "1:230363214935:web:c804f127a6728d3a6c1f12",
+                    measurementId: "G-ZM0K2WL7TH"
+                };
 
             const app = initializeApp(firebaseConfig);
             db = getFirestore(app);
             auth = getAuth(app);
             
-            onAuthStateChanged(auth, async (user) => {
+            onAuthStateChanged(auth, (user) => {
                 if (user) {
                     userId = user.uid;
                     appId = (typeof __app_id !== 'undefined') ? __app_id : firebaseConfig.appId;
@@ -469,9 +529,9 @@
                         let data = snap.exists() ? snap.data() : null;
                         if (!data || !data.routine) {
                             setDoc(scheduleDocRef, defaultScheduleData);
-                            return;
+                            return; // Let the listener pick up the new default data
                         }
-                        checkAndResetSchedule(data);
+                        checkAndResetScheduleForNewDay(data);
                         renderApp(data);
                     }, (error) => console.error("Firestore snapshot error:", error));
                 }
@@ -489,60 +549,12 @@
                     alert("Could not connect to the database. Please check your Firebase settings and security rules.");
                 }
             }
+
+            setupEventListeners();
             authInit();
+        }
 
-            async function checkAndResetSchedule(data) {
-                const todayStr = new Date().toISOString().split('T')[0];
-                if (data.lastReset !== todayStr) {
-                    const newRoutine = data.routine.map(item => ({ ...item, completed: false }));
-                    await setDoc(scheduleDocRef, { routine: newRoutine, lastReset: todayStr }, { merge: true });
-                }
-            }
-            
-            document.getElementById('historyBtn').addEventListener('click', openHistoryModal);
-            document.getElementById('focusTipBtn').addEventListener('click', showFocusTip);
-            closeModalBtn.addEventListener('click', closeModal);
-            modalOverlay.addEventListener('click', closeModal);
-            document.getElementById('customizeBtn').addEventListener('click', openCustomizeForm);
-            
-            document.getElementById('timeline').addEventListener('click', async (e) => {
-                const target = e.target;
-                if (target.classList.contains('task-checkbox')) {
-                    const index = parseInt(target.dataset.index, 10);
-                    if (currentScheduleData.routine && currentScheduleData.routine[index]) {
-                        const updatedRoutine = [...currentScheduleData.routine];
-                        updatedRoutine[index] = { ...updatedRoutine[index], completed: target.checked };
-                        await updateDoc(scheduleDocRef, { routine: updatedRoutine });
-                    }
-                }
-            });
-            
-            document.getElementById('tipModal').addEventListener('click', (e) => {
-                 if (e.target.id === 'save-schedule-btn') saveSchedule();
-                 if (e.target.id === 'add-item-btn') {
-                    const form = document.getElementById('schedule-editor-form');
-                    const newItemHtml = `<div class="grid grid-cols-1 md:grid-cols-6 gap-2 p-3 border rounded-lg bg-slate-50 relative">
-                        <div class="md:col-span-1"><label class="text-xs">Time</label><input type="time" value="12:00" data-field="time" class="mt-1 block w-full p-1 border rounded custom-time-input"></div>
-                        <div class="md:col-span-2"><label class="text-xs">Activity</label><input type="text" value="New Activity" data-field="activity" class="mt-1 block w-full p-1 border rounded"></div>
-                        <div class="md:col-span-2"><label class="text-xs">Goal</label><input type="text" value="New Goal" data-field="goal" class="mt-1 block w-full p-1 border rounded"></div>
-                        <div class="md:col-span-1"><label class="text-xs">Category</label><select data-field="category" class="mt-1 block w-full p-1 border rounded">${categoryOptions.map(c => `<option value="${c}">${c}</option>`).join('')}</select></div>
-                        <button class="delete-item-btn absolute -top-2 -right-2 bg-red-500 text-white rounded-full h-6 w-6 flex items-center justify-center text-xs">&times;</button>
-                    </div>`;
-                    form.insertAdjacentHTML('beforeend', newItemHtml);
-                }
-                if (e.target.classList.contains('delete-item-btn')) {
-                    e.target.parentElement.remove();
-                }
-            });
-
-            setInterval(() => {
-                if(currentScheduleData.routine && currentScheduleData.routine.length > 0) {
-                    renderTimeline(currentScheduleData.routine); 
-                    updateUI(currentScheduleData);
-                    autoSaveHistory();
-                }
-            }, 60000);
-        });
+        document.addEventListener('DOMContentLoaded', initApp);
     </script>
 </body>
 </html>
